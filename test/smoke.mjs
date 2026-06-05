@@ -15,6 +15,7 @@ const ast = toCAst(document);
 assert.equal(ast.kind, 'c.header');
 assert.equal(ast.declarations.some((declaration) => declaration.kind === 'struct' && declaration.name === 'Todo'), true);
 assert.equal(ast.declarations.some((declaration) => declaration.kind === 'capabilityMacro' && declaration.name === 'RENDER_VIEW_CAPABILITY'), true);
+assert.equal(ast.declarations.find((declaration) => declaration.kind === 'struct' && declaration.name === 'Todo').sourceRef.semanticNodeId, 'entity_todo');
 assert.equal(renderCAst(ast), out);
 assert.match(out, /typedef struct TodoInput/);
 assert.match(out, /#define RENDER_VIEW_CAPABILITY "view\.render"/);

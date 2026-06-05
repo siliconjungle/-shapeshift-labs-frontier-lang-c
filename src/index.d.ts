@@ -5,6 +5,13 @@ export interface EmitCHeaderOptions {
   readonly guard?: string;
 }
 
+export interface CSourceRef {
+  readonly semanticNodeId: string;
+  readonly semanticNodeKind?: string;
+  readonly semanticNodeName?: string;
+  readonly regionIds?: readonly string[];
+}
+
 export type CAstDeclaration =
   | {
       readonly kind: 'opaqueStruct';
@@ -14,17 +21,20 @@ export type CAstDeclaration =
       readonly kind: 'capabilityMacro';
       readonly name: string;
       readonly value: string;
+      readonly sourceRef?: CSourceRef;
     }
   | {
       readonly kind: 'struct';
       readonly name: string;
       readonly fields: readonly { readonly name: string; readonly type: string }[];
+      readonly sourceRef?: CSourceRef;
     }
   | {
       readonly kind: 'functionPrototype';
       readonly name: string;
       readonly returnType: string;
       readonly parameters: readonly { readonly name: string; readonly type: string }[];
+      readonly sourceRef?: CSourceRef;
     };
 
 export interface CAstHeader {
