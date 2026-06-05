@@ -1,0 +1,15 @@
+import assert from 'node:assert/strict';
+import { actionNode, createDocument, entityNode, typeNode } from '@shapeshift-labs/frontier-lang-kernel';
+import { emitCHeader } from '../dist/index.js';
+
+const document = createDocument({ id: 'doc', name: 'Doc', nodes: [
+  typeNode({ id: 'type_input', name: 'TodoInput', fields: [{ id: 'title', name: 'title', type: 'Text' }] }),
+  entityNode({ id: 'entity_todo', name: 'Todo', fields: [{ id: 'count', name: 'count', type: 'Int' }] }),
+  actionNode({ id: 'action_add', name: 'add_todo', input: 'TodoInput', returns: 'Patch' })
+] });
+const out = emitCHeader(document);
+assert.match(out, /typedef struct TodoInput/);
+assert.match(out, /const char \* title/);
+assert.match(out, /typedef struct Todo/);
+assert.match(out, /int64_t count/);
+assert.match(out, /frontier_patch_list add_todo/);
