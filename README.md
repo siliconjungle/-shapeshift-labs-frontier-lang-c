@@ -2,6 +2,20 @@
 
 C header projection adapter for Frontier Lang semantic documents.
 
+## Usage
+
+```js
+import { emitCHeaderWithSourceMap } from '@shapeshift-labs/frontier-lang-c';
+
+const { code, sourceMap, ast } = emitCHeaderWithSourceMap(document, {
+  sourcePath: 'todo.frontier',
+  targetPath: 'todo.h',
+  semanticIndexId: 'semantic_index_todo'
+});
+```
+
+`sourceMap.mappings` links emitted declaration blocks back to Frontier Lang semantic node ids. These sidecars are declaration-level review and merge evidence, not token-exact source maps.
+
 ## Related Packages
 
 The published Frontier package family is generated from one shared package catalog so READMEs stay in sync across packages:
@@ -186,4 +200,3 @@ npm run bench
 ```
 
 These are Frontier-only package measurements for @shapeshift-labs/frontier-lang-c. They exercise the package's own parser, checker, compiler, projection, CLI, fuzz, or semantic-kernel surface without making competitor comparison claims.
-

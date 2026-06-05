@@ -62,26 +62,42 @@ export function toCAst(document, options = {}) {
 }
 
 export function renderCAst(ast) {
+  return renderCAstWithSourceMap(ast).code;
+}
+
+export function renderCAstWithSourceMap(ast, options = {}) {
   const lines = [];
+  const mappings = [];
+  const target = normalizeTarget(options, 'c');
   lines.push(`/* ${ast.banner} */`, `#ifndef ${ast.guard}`, `#define ${ast.guard}`, '', '#include <stdbool.h>', '#include <stdint.h>', '');
-  for (const declaration of ast.declarations) {
-    if (declaration.kind === 'opaqueStruct') lines.push(`typedef struct ${declaration.name} ${declaration.name};`);
-    if (declaration.kind === 'capabilityMacro') lines.push(`#define ${declaration.name} ${JSON.stringify(declaration.value)}`);
-  }
+  ast.declarations.forEach((declaration, index) => {
+    if (declaration.kind === 'struct' || declaration.kind === 'functionPrototype') return;
+    renderMappedCDeclaration(lines, mappings, declaration, index, target, options);
+  });
   lines.push('');
-  for (const declaration of ast.declarations) {
-    if (declaration.kind === 'struct') renderStruct(lines, declaration);
-    if (declaration.kind === 'functionPrototype') {
-      const parameters = declaration.parameters.map((parameter) => `${parameter.type} ${parameter.name}`).join(', ');
-      lines.push(`${declaration.returnType} ${declaration.name}(${parameters});`, '');
-    }
-  }
+  ast.declarations.forEach((declaration, index) => {
+    if (declaration.kind !== 'struct' && declaration.kind !== 'functionPrototype') return;
+    renderMappedCDeclaration(lines, mappings, declaration, index, target, options);
+  });
   lines.push(`#endif /* ${ast.guard} */`);
-  return `${lines.join('\n').trimEnd()}\n`;
+  const code = `${lines.join('\n').trimEnd()}\n`;
+  return {
+    code,
+    sourceMap: sourceMapEnvelope(ast, mappings, target, options, 'c', 'c-renderer-declaration-block')
+  };
 }
 
 export function emitCHeader(document, options = {}) {
   return renderCAst(toCAst(document, options));
+}
+
+export function emitCHeaderWithSourceMap(document, options = {}) {
+  const ast = toCAst(document, options);
+  const result = renderCAstWithSourceMap(ast, {
+    sourceMapId: options.sourceMapId ?? `sourcemap_${idFragment(document.id)}_c`,
+    ...options
+  });
+  return { ...result, ast };
 }
 
 function structItem(node, fields) {
@@ -97,4 +113,111 @@ function renderStruct(lines, declaration) {
   lines.push(`typedef struct ${declaration.name} {`);
   for (const field of declaration.fields) lines.push(`  ${field.type} ${field.name};`);
   lines.push(`} ${declaration.name};`, '');
+}
+
+function renderMappedCDeclaration(lines, mappings, declaration, index, target, options) {
+  const startLine = lines.length + 1;
+  const startIndex = lines.length;
+  renderCDeclaration(lines, declaration);
+  const generatedSpan = declarationBlockSpan(lines, startIndex, startLine, declaration, target, options.targetPath);
+  if (declaration.sourceRef?.semanticNodeId && generatedSpan) {
+    mappings.push(sourceMapMapping(declaration, index, generatedSpan, target, options, 'c-renderer-declaration-block'));
+  }
+}
+
+function renderCDeclaration(lines, declaration) {
+  if (declaration.kind === 'opaqueStruct') lines.push(`typedef struct ${declaration.name} ${declaration.name};`);
+  if (declaration.kind === 'capabilityMacro') lines.push(`#define ${declaration.name} ${JSON.stringify(declaration.value)}`);
+  if (declaration.kind === 'struct') renderStruct(lines, declaration);
+  if (declaration.kind === 'functionPrototype') {
+    const parameters = declaration.parameters.map((parameter) => `${parameter.type} ${parameter.name}`).join(', ');
+    lines.push(`${declaration.returnType} ${declaration.name}(${parameters});`, '');
+  }
+}
+
+function declarationBlockSpan(lines, startIndex, startLine, declaration, target, targetPath) {
+  let endIndex = lines.length - 1;
+  while (endIndex >= startIndex && lines[endIndex] === '') endIndex -= 1;
+  if (endIndex < startIndex) return undefined;
+  return definedObject({
+    path: targetPath,
+    target,
+    targetPath,
+    generatedName: declaration.name,
+    startLine,
+    startColumn: 1,
+    endLine: endIndex + 1,
+    endColumn: lines[endIndex].length + 1
+  });
+}
+
+function normalizeTarget(options, language) {
+  return definedObject({
+    ...(options.target ?? {}),
+    language: options.target?.language ?? language,
+    emitPath: options.target?.emitPath ?? options.targetPath
+  });
+}
+
+function sourceMapMapping(declaration, index, generatedSpan, target, options, strategy) {
+  return definedObject({
+    id: `map_${idFragment(declaration.sourceRef.semanticNodeId)}_${index}`,
+    semanticNodeId: declaration.sourceRef.semanticNodeId,
+    nativeSourceId: options.nativeSourceId,
+    semanticSymbolId: options.semanticSymbolIdsBySemanticNodeId?.[declaration.sourceRef.semanticNodeId],
+    semanticOccurrenceId: options.semanticOccurrenceIdsBySemanticNodeId?.[declaration.sourceRef.semanticNodeId],
+    sourceSpan: options.sourceSpansBySemanticNodeId?.[declaration.sourceRef.semanticNodeId],
+    generatedSpan,
+    target,
+    generatedName: declaration.name,
+    evidenceIds: options.evidence?.map((record) => record.id),
+    lossIds: options.lossIdsBySemanticNodeId?.[declaration.sourceRef.semanticNodeId],
+    precision: 'declaration',
+    metadata: {
+      generatedSpanStrategy: strategy,
+      sourceMapImplication: 'Generated span covers the emitted declaration block and is not token exact.',
+      semanticIndexImplication: 'Mapping is anchored by semanticNodeId; symbol and occurrence ids are optional caller-provided links.',
+      lossAccountingImplication: 'No loss ids are inferred by the printer; caller-provided loss ids are copied when available.',
+      mergeReadinessImplication: 'Suitable for declaration-level overlap review, not fine-grained token merge admission.',
+      semanticNodeKind: declaration.sourceRef.semanticNodeKind,
+      semanticNodeName: declaration.sourceRef.semanticNodeName,
+      regionIds: declaration.sourceRef.regionIds
+    }
+  });
+}
+
+function sourceMapEnvelope(ast, mappings, target, options, language, strategy) {
+  return definedObject({
+    kind: 'frontier.lang.sourceMap',
+    version: 1,
+    id: options.sourceMapId ?? `sourcemap_${idFragment(ast.kind)}_${language}`,
+    sourcePath: options.sourcePath,
+    sourceHash: options.sourceHash,
+    target,
+    targetPath: options.targetPath,
+    targetHash: options.targetHash,
+    semanticIndexId: options.semanticIndexId,
+    universalAstId: options.universalAstId,
+    nativeAstId: options.nativeAstId,
+    nativeSourceId: options.nativeSourceId,
+    mappings,
+    evidence: options.evidence ?? [],
+    metadata: {
+      generatedSpanStrategy: strategy,
+      precision: 'declaration',
+      sourceMapImplication: 'Approximate generated spans are emitted as sidecar mappings without rewriting the printer.',
+      semanticIndexImplication: 'Semantic index linkage remains optional and can be attached through ids supplied in options.',
+      lossAccountingImplication: 'The renderer does not create loss records; existing loss ids can be associated per semantic node.',
+      mergeReadinessImplication: 'Declaration-block mappings can guide generated-output review but should not be treated as token-exact source maps.',
+      ...(options.metadata ?? {})
+    }
+  });
+}
+
+function definedObject(object) {
+  return Object.fromEntries(Object.entries(object).filter(([, value]) => value !== undefined));
+}
+
+function idFragment(value) {
+  return cIdentifier(String(value ?? 'unknown')).replace(/^_+/, '') || 'unknown';
 }
