@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import { actionNode, capabilityNode, createDocument, entityNode, stateNode, typeNode } from '@shapeshift-labs/frontier-lang-kernel';
+import { actionNode, capabilityNode, createDocument, effectNode, entityNode, stateNode, typeNode } from '@shapeshift-labs/frontier-lang-kernel';
 import { emitCHeader, emitCHeaderWithSourceMap, renderCAst, renderCAstWithSourceMap, toCAst } from '../dist/index.js';
 
 const document = createDocument({ id: 'doc', name: 'Doc', nodes: [
@@ -7,6 +7,7 @@ const document = createDocument({ id: 'doc', name: 'Doc', nodes: [
   capabilityNode({ id: 'cap_render', name: 'RenderView', capability: 'view.render', unsupportedTargets: [
     { target: { language: 'c', platform: 'embedded' }, reason: 'Host display adapter required.' }
   ] }),
+  effectNode({ id: 'effect_persist', name: 'PersistTodo', capability: 'storage.write', input: 'TodoInput', returns: 'Json', resources: ['TodoDb.todos'] }),
   entityNode({ id: 'entity_todo', name: 'Todo', fields: [{ id: 'count', name: 'count', type: 'Int' }] }),
   stateNode({ id: 'state_todo', name: 'TodoDb', collections: [{ id: 'collection_todos', name: 'todos', type: { kind: 'map', key: 'Text', value: { kind: 'ref', name: 'Todo' } } }] }),
   actionNode({ id: 'action_add', name: 'add_todo', input: 'TodoInput', returns: 'Patch' })
@@ -34,8 +35,11 @@ assert.equal(ast.kind, 'c.header');
 assert.equal(ast.declarations.some((declaration) => declaration.kind === 'struct' && declaration.name === 'Todo'), true);
 assert.equal(ast.declarations.some((declaration) => declaration.kind === 'struct' && declaration.name === 'TodoDbState'), true);
 assert.equal(ast.declarations.some((declaration) => declaration.kind === 'capabilityMacro' && declaration.name === 'RENDER_VIEW_CAPABILITY'), true);
+assert.equal(ast.declarations.some((declaration) => declaration.kind === 'capabilityMacro' && declaration.name === 'PERSIST_TODO_EFFECT_CAPABILITY'), true);
+assert.equal(ast.declarations.some((declaration) => declaration.kind === 'functionPrototype' && declaration.name === 'run_PersistTodo_effect'), true);
 assert.equal(ast.declarations.find((declaration) => declaration.kind === 'struct' && declaration.name === 'Todo').sourceRef.semanticNodeId, 'entity_todo');
 assert.equal(ast.declarations.find((declaration) => declaration.kind === 'struct' && declaration.name === 'TodoDbState').sourceRef.semanticNodeId, 'state_todo');
+assert.equal(ast.declarations.find((declaration) => declaration.kind === 'functionPrototype' && declaration.name === 'run_PersistTodo_effect').sourceRef.semanticNodeId, 'effect_persist');
 assert.equal(renderCAst(ast), out);
 assert.equal(rendered.code, out);
 assert.equal(emitted.code, out);
@@ -54,8 +58,13 @@ assert.equal(todoMapping.semanticSymbolId, 'symbol_todo');
 assert.deepEqual(todoMapping.lossIds, ['loss_collection_type']);
 assert.deepEqual(todoMapping.evidenceIds, ['evidence_projection']);
 assert.deepEqual(todoMapping.metadata.regionIds, ['count']);
+const effectMapping = rendered.sourceMap.mappings.find((mapping) => mapping.semanticNodeId === 'effect_persist' && mapping.generatedName === 'run_PersistTodo_effect');
+assert.equal(effectMapping.generatedName, 'run_PersistTodo_effect');
 assert.match(out, /typedef struct TodoInput/);
 assert.match(out, /#define RENDER_VIEW_CAPABILITY "view\.render"/);
+assert.match(out, /typedef struct frontier_effect_env frontier_effect_env;/);
+assert.match(out, /#define PERSIST_TODO_EFFECT_CAPABILITY "storage\.write"/);
+assert.match(out, /frontier_json_value run_PersistTodo_effect\(frontier_effect_env \* env, TodoInput input\)/);
 assert.match(out, /const char \* title/);
 assert.match(out, /typedef struct Todo/);
 assert.match(out, /int64_t count/);

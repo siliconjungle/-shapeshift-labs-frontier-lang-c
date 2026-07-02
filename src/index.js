@@ -33,7 +33,8 @@ export function toCAst(document, options = {}) {
   const stateType = firstStateType(document);
   const declarations = [
     { kind: 'opaqueStruct', name: 'frontier_json_value' },
-    { kind: 'opaqueStruct', name: 'frontier_patch_list' }
+    { kind: 'opaqueStruct', name: 'frontier_patch_list' },
+    { kind: 'opaqueStruct', name: 'frontier_effect_env' }
   ];
   for (const node of Object.values(document.nodes)) {
     if (node.kind === 'type' && node.fields?.length) declarations.push(structItem(node, node.fields));
@@ -45,6 +46,24 @@ export function toCAst(document, options = {}) {
       value: node.capability,
       sourceRef: sourceRef(node)
     });
+    if (node.kind === 'effect') {
+      declarations.push({
+        kind: 'capabilityMacro',
+        name: `${cConstIdentifier(node.name)}_EFFECT_CAPABILITY`,
+        value: node.capability,
+        sourceRef: sourceRef(node)
+      });
+      declarations.push({
+        kind: 'functionPrototype',
+        name: `run_${cIdentifier(node.name)}_effect`,
+        returnType: cType(node.returns ?? 'Json'),
+        parameters: [
+          { name: 'env', type: 'frontier_effect_env *' },
+          { name: 'input', type: cType(node.input ?? 'Json') }
+        ],
+        sourceRef: sourceRef(node)
+      });
+    }
   }
   for (const node of Object.values(document.nodes)) {
     if (node.kind === 'action') {

@@ -1,6 +1,6 @@
 {
   "name": "@shapeshift-labs/frontier-lang-c",
-  "version": "0.2.10",
+  "version": "0.2.11",
   "description": "C projection adapter for Frontier Lang semantic source documents.",
   "type": "module",
   "main": "./dist/index.js",
