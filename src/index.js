@@ -81,10 +81,10 @@ export function toCAst(document, options = {}) {
       declarations.push({
         kind: 'functionPrototype',
         name: `call_${cIdentifier(node.name)}_extern`,
-        returnType: cType(node.returns ?? 'Json'),
+        returnType: cType(node.returns ?? node.signature?.returns ?? 'Json'),
         parameters: [
           { name: 'env', type: 'frontier_extern_env *' },
-          { name: 'input', type: cType(node.input ?? 'Json') }
+          { name: 'input', type: cType(node.input ?? node.signature?.input ?? 'Json') }
         ],
         sourceRef: sourceRef(node)
       });
