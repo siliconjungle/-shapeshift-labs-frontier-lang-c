@@ -34,7 +34,8 @@ export function toCAst(document, options = {}) {
   const declarations = [
     { kind: 'opaqueStruct', name: 'frontier_json_value' },
     { kind: 'opaqueStruct', name: 'frontier_patch_list' },
-    { kind: 'opaqueStruct', name: 'frontier_effect_env' }
+    { kind: 'opaqueStruct', name: 'frontier_effect_env' },
+    { kind: 'opaqueStruct', name: 'frontier_extern_env' }
   ];
   for (const node of Object.values(document.nodes)) {
     if (node.kind === 'type' && node.fields?.length) declarations.push(structItem(node, node.fields));
@@ -59,6 +60,30 @@ export function toCAst(document, options = {}) {
         returnType: cType(node.returns ?? 'Json'),
         parameters: [
           { name: 'env', type: 'frontier_effect_env *' },
+          { name: 'input', type: cType(node.input ?? 'Json') }
+        ],
+        sourceRef: sourceRef(node)
+      });
+    }
+    if (node.kind === 'extern') {
+      declarations.push({
+        kind: 'capabilityMacro',
+        name: `${cConstIdentifier(node.name)}_EXTERN_SYMBOL`,
+        value: node.symbol ?? node.name,
+        sourceRef: sourceRef(node)
+      });
+      declarations.push({
+        kind: 'capabilityMacro',
+        name: `${cConstIdentifier(node.name)}_EXTERN_LANGUAGE`,
+        value: node.language ?? '',
+        sourceRef: sourceRef(node)
+      });
+      declarations.push({
+        kind: 'functionPrototype',
+        name: `call_${cIdentifier(node.name)}_extern`,
+        returnType: cType(node.returns ?? 'Json'),
+        parameters: [
+          { name: 'env', type: 'frontier_extern_env *' },
           { name: 'input', type: cType(node.input ?? 'Json') }
         ],
         sourceRef: sourceRef(node)
