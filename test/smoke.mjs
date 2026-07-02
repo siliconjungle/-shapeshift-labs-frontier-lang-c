@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import { actionNode, capabilityNode, createDocument, entityNode, typeNode } from '@shapeshift-labs/frontier-lang-kernel';
+import { actionNode, capabilityNode, createDocument, entityNode, stateNode, typeNode } from '@shapeshift-labs/frontier-lang-kernel';
 import { emitCHeader, emitCHeaderWithSourceMap, renderCAst, renderCAstWithSourceMap, toCAst } from '../dist/index.js';
 
 const document = createDocument({ id: 'doc', name: 'Doc', nodes: [
@@ -8,6 +8,7 @@ const document = createDocument({ id: 'doc', name: 'Doc', nodes: [
     { target: { language: 'c', platform: 'embedded' }, reason: 'Host display adapter required.' }
   ] }),
   entityNode({ id: 'entity_todo', name: 'Todo', fields: [{ id: 'count', name: 'count', type: 'Int' }] }),
+  stateNode({ id: 'state_todo', name: 'TodoDb', collections: [{ id: 'collection_todos', name: 'todos', type: { kind: 'map', key: 'Text', value: { kind: 'ref', name: 'Todo' } } }] }),
   actionNode({ id: 'action_add', name: 'add_todo', input: 'TodoInput', returns: 'Patch' })
 ] });
 const out = emitCHeader(document);
@@ -31,8 +32,10 @@ const rendered = renderCAstWithSourceMap(ast, {
 const emitted = emitCHeaderWithSourceMap(document, { targetPath: 'doc.h' });
 assert.equal(ast.kind, 'c.header');
 assert.equal(ast.declarations.some((declaration) => declaration.kind === 'struct' && declaration.name === 'Todo'), true);
+assert.equal(ast.declarations.some((declaration) => declaration.kind === 'struct' && declaration.name === 'TodoDbState'), true);
 assert.equal(ast.declarations.some((declaration) => declaration.kind === 'capabilityMacro' && declaration.name === 'RENDER_VIEW_CAPABILITY'), true);
 assert.equal(ast.declarations.find((declaration) => declaration.kind === 'struct' && declaration.name === 'Todo').sourceRef.semanticNodeId, 'entity_todo');
+assert.equal(ast.declarations.find((declaration) => declaration.kind === 'struct' && declaration.name === 'TodoDbState').sourceRef.semanticNodeId, 'state_todo');
 assert.equal(renderCAst(ast), out);
 assert.equal(rendered.code, out);
 assert.equal(emitted.code, out);
@@ -56,4 +59,6 @@ assert.match(out, /#define RENDER_VIEW_CAPABILITY "view\.render"/);
 assert.match(out, /const char \* title/);
 assert.match(out, /typedef struct Todo/);
 assert.match(out, /int64_t count/);
-assert.match(out, /frontier_patch_list add_todo/);
+assert.match(out, /typedef struct TodoDbState/);
+assert.match(out, /frontier_json_value todos/);
+assert.match(out, /frontier_patch_list add_todo\(const TodoDbState \* state, TodoInput input\)/);
